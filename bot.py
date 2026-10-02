@@ -66,21 +66,26 @@ def generate_discount_code(percent: int) -> str:
   return f"OFF{percent}-" + "".join(random.choices(chars, k=6))
 
 
-# ------------------- کیبورد منوی اصلی -------------------
+# ------------------- کیبورد کامل و اصلی ربات -------------------
 main_menu_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [
-            KeyboardButton(text="راهنمای کسب درآمد 📋"),
-            KeyboardButton(text="ثبت معرفی‌کننده 🔗"),
+            KeyboardButton(text="🛒 خرید فیلترشکن"),
+            KeyboardButton(text="🤖 خرید هوش مصنوعی"),
         ],
         [
-            KeyboardButton(text="معرفی کانال و گروه 📢"),
-            KeyboardButton(text="امتیازات من ⭐"),
+            KeyboardButton(text="💳 موجودی کیف پول"),
+            KeyboardButton(text="📋 راهنمای کسب درآمد"),
         ],
         [
-            KeyboardButton(text="جدول برترین‌ها 🏆"),
-            KeyboardButton(text="منوی اصلی 🏠"),
+            KeyboardButton(text="🔗 ثبت معرفی‌کننده"),
+            KeyboardButton(text="⭐ امتیازات من"),
         ],
+        [
+            KeyboardButton(text="📢 کانال و گروه ما"),
+            KeyboardButton(text="🏆 جدول برترین‌ها"),
+        ],
+        [KeyboardButton(text="منوی اصلی 🏠")],
     ],
     resize_keyboard=True,
 )
@@ -91,9 +96,10 @@ main_menu_keyboard = ReplyKeyboardMarkup(
 @dp.message(F.text.in_(["منوی اصلی 🏠", "/menu"]))
 async def cmd_start(message: Message):
   welcome_text = (
-      "سلام! 👋 خوش آمدید.\n\n"
-      "🤖 به ربات جامع ما خوش آمدید. از طریق دکمه‌های زیر می‌توانید به بخش‌های"
-      " مختلف دسترسی داشته باشید 👇"
+      f"سلام {message.from_user.first_name}! 👋\n\n"
+      "🤖 به ربات رسمی **Eror_connection** خوش آمدید.\n\n"
+      "از طریق دکمه‌های زیر می‌توانید به بخش‌های مختلف (خرید فیلترشکن، هوش"
+      " مصنوعی، کیف پول و...) دسترسی داشته باشید 👇"
   )
   await message.reply(
       welcome_text, reply_markup=main_menu_keyboard, parse_mode="Markdown"
@@ -218,7 +224,7 @@ async def handle_send_discount_code(message: Message):
     await message.chat.send_message(
         text=(
             f"✅ کد تخفیف **{percent}%** انحصاری برای کاربر {user_link} در"
-            " **پی‌‌وی (PV)** ارسال شد! 📩"
+            " **پی‌وی (PV)** ارسال شد! 📩"
         ),
         reply_to_message_id=message.reply_to_message.message_id,
         parse_mode="Markdown",
@@ -236,11 +242,11 @@ async def handle_send_discount_code(message: Message):
     )
 
 
-# ------------------- ۳. بررسی موجودی کیف پول و امتیازات -------------------
+# ------------------- ۳. بررسی موجودی کیف پول -------------------
 @dp.message(Command("balance"))
 @dp.message(
     F.text.in_(
-        ["موجودی", "کیف پول", "balance", "/balance", "امتیازات من ⭐"]
+        ["موجودی", "کیف پول", "balance", "/balance", "💳 موجودی کیف پول"]
     )
 )
 async def handle_check_balance(message: Message):
@@ -252,37 +258,69 @@ async def handle_check_balance(message: Message):
   )
 
 
-# ------------------- ۴. دکمه‌های منوی شیشه‌ای و متنی -------------------
-@dp.message(F.text == "راهنمای کسب درآمد 📋")
+# ------------------- ۴. هندلرهای دکمه‌های منو -------------------
+@dp.message(F.text == "🛒 خرید فیلترشکن")
+async def menu_vpn(message: Message):
+  await message.reply(
+      "🛒 **بخش خرید فیلترشکن پرسرعت:**\n\nبرای تهیه سرویس‌های اختصاصی به کانال"
+      " ما سر بزنید یا با ادمین در ارتباط باشید.",
+      parse_mode="Markdown",
+  )
+
+
+@dp.message(F.text == "🤖 خرید هوش مصنوعی")
+async def menu_ai(message: Message):
+  await message.reply(
+      "🤖 **بخش خرید اکانت هوش مصنوعی:**\n\nجهت خرید اکانت‌های پرمیوم و ابزارهای"
+      " هوش مصنوعی پیام بدهید.",
+      parse_mode="Markdown",
+  )
+
+
+@dp.message(F.text == "📋 راهنمای کسب درآمد")
 async def menu_guide(message: Message):
   await message.reply(
-      "📋 **راهنمای کسب درآمد:**\n\nبا دعوت دوستان خود به ربات می‌توانید پاداش"
-      " دریافت کنید.",
+      "📋 **راهنمای کسب درآمد:**\n\nبا دعوت از دوستان خود به ربات"
+      " **Eror_connection** می‌توانید پاداش دریافت کنید.",
       parse_mode="Markdown",
   )
 
 
-@dp.message(F.text == "ثبت معرفی‌کننده 🔗")
+@dp.message(F.text == "🔗 ثبت معرفی‌کننده")
 async def menu_referral(message: Message):
   await message.reply(
-      "🔗 لطفاً لینک یا آیدی معرفی‌کننده خود را بفرستید.",
+      "🔗 لطفاً لینک یا آیدی کاربری معرفی‌کننده خود را بفرستید.",
       parse_mode="Markdown",
   )
 
 
-@dp.message(F.text == "معرفی کانال و گروه 📢")
+@dp.message(F.text == "⭐ امتیازات من")
+async def menu_points(message: Message):
+  user_id = message.from_user.id
+  balance = user_wallets.get(user_id, 0)
+  await message.reply(
+      f"⭐ **امتیازات و موجودی شما:**\n\n💰 موجودی کیف پول: **{balance:,}"
+      " تومان**",
+      parse_mode="Markdown",
+  )
+
+
+@dp.message(F.text == "📢 کانال و گروه ما")
 async def menu_channels(message: Message):
   await message.reply(
-      "📢 **کانال‌ها و گروه‌های رسمی ما:**\n\nبرای اطلاع از آخرین اخبار و تخفیف‌ها"
-      " حتماً در کانال ما عضو شوید.",
+      "📢 **کانال و گروه رسمی Eror_connection:**\n\nبرای پیگیری اخبار و اطلاعیه‌ها"
+      " حتماً در کانال ما عضو شوید:\n👉"
+      " [@Eror_connection](https://t.me/Eror_connection)",
       parse_mode="Markdown",
+      disable_web_page_preview=True,
   )
 
 
-@dp.message(F.text == "جدول برترین‌ها 🏆")
+@dp.message(F.text == "🏆 جدول برترین‌ها")
 async def menu_leaderboard(message: Message):
   await message.reply(
-      "🏆 **جدول برترین‌ها:**\n\nبه زودی کاربران برتر اینجا نمایش داده می‌شوند.",
+      "🏆 **جدول برترین‌ها:**\n\nلیست برترین کاربران ربات به زودی منتشر خواهد"
+      " شد.",
       parse_mode="Markdown",
   )
 
@@ -291,7 +329,7 @@ async def menu_leaderboard(message: Message):
 async def main():
   logging.basicConfig(level=logging.INFO)
   load_data()
-  print("🤖 ربات آماده به کار است...")
+  print("🤖 ربات Eror_connection آماده به کار است...")
   await dp.start_polling(bot)
 
 
