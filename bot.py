@@ -1,8 +1,6 @@
 import logging
 import datetime
-import json
 import os
-import shutil
 import re
 import asyncio
 from aiogram import Bot, Dispatcher, types, F, Router
@@ -11,11 +9,21 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.enums import ChatType, ParseMode
+from motor.motor_asyncio import AsyncIOMotorClient
 
 # ------------------- تنظیمات اولیه -------------------
 TOKEN = "8909439742:AAF0a-ZR0OG-p5YbHq0_Eh6cucO8_xrAWQU"
 ADMIN_USERNAME = 'eror5511'
 ADMIN_ID = 8846204367
+
+# تنظیمات دیتابیس MongoDB
+MONGO_URI = "mongodb+srv://pedraaawm_db_user:QJzZfOPM7cQRaVAd@cluster0.wul6ohg.mongodb.net/?appName=Cluster0"
+mongo_client = AsyncIOMotorClient(MONGO_URI)
+db = mongo_client["shop_bot_db"]
+
+users_col = db["users"]
+point_logs_col = db["point_logs"]
+settings_col = db["settings"]
 
 CARD_NUMBER = "6219861967850321"
 CARD_HOLDER = "کریمپور"
@@ -65,11 +73,6 @@ WINDSCRIBE_PRICES = {
     }
 }
 
-SPECIAL_DISCOUNT_PRICES = {
-    "🎁 ۶ ماهه - ۱ کاربره": {"price": 590000},
-    "🎁 ۶ ماهه - ۲ کاربره": {"price": 990000}
-}
-
 V2RAY_LOCATIONS = ["🇩🇪 آلمان", "🇫🇮 فنلاند", "🇫🇷 فرانسه", "🇺🇸 آمریکا", "🇹🇷 ترکیه", "🇳🇱 هلند"]
 
 V2RAY_PRICES = {
@@ -82,100 +85,50 @@ V2RAY_MULTI_PRICES = {
     "⚡️ اشتراک ۷۰ گیگ": 379000, "⚡ اشتراک ۱۵۰ گیگ": 599000
 }
 
-TELEGRAM_PREMIUM_PRICES = {
-    "🗓 ۳ ماهه پرمیوم": 1250000, "🗓 ۶ ماهه پرمیوم": 1850000, "🗓 ۱۲ ماهه پرمیوم": 2950000
-}
-
-TELEGRAM_STARS_PRICES = {
-    "⭐ ۱۰۰ تا استارز": 180000, "⭐ ۲۰۰ تا استارز": 350000,
-    "⭐ ۵۰۰ تا استارز": 850000, "⭐ ۱۰۰۰ تا استارز": 1650000
-}
-
 logging.basicConfig(level=logging.INFO)
 
-# ------------------- تنظیمات دیتابیس -------------------
-DATA_FILE = "bot_data.json"
-
-def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return (
-                    {int(k): v for k, v in data.get("user_wallets", {}).items()},
-                    {int(k): v for k, v in data.get("user_subscriptions", {}).items()},
-                    {int(k): v for k, v in data.get("user_history", {}).items()},
-                    data.get("point_logs", []),
-                    set(data.get("registered_inviters", [])),
-                    {int(k): v for k, v in data.get("user_referrals", {}).items()},
-                    set(data.get("purchased_referrals", [])),
-                    data.get("group_chat_id", None),
-                    {int(k): v for k, v in data.get("user_names", {}).items()}
-                )
-        except: pass
-    return {}, {}, {}, [], set(), {}, set(), None, {}
-
-def save_data():
-    data = {
-        "user_wallets": user_wallets,
-        "user_subscriptions": user_subscriptions,
-        "user_history": user_history,
-        "point_logs": point_logs,
-        "registered_inviters": list(registered_inviters),
-        "user_referrals": user_referrals,
-        "purchased_referrals": list(purchased_referrals),
-        "group_chat_id": group_chat_id,
-        "user_names": user_names
-    }
-    with open("bot_data_temp.json", "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-    shutil.move("bot_data_temp.json", DATA_FILE)
-
-(user_wallets, user_subscriptions, user_history, point_logs, 
- registered_inviters, user_referrals, purchased_referrals, group_chat_id, user_names) = load_data()
-
-# ------------------- توابع کمکی -------------------
-def update_user_info(user):
+# ------------------- توابع MongoDB -------------------
+async def update_user_info(user):
     if user and not user.is_bot:
-        user_names[user.id] = {"first_name": user.first_name or "کاربر", "username": user.username or ""}
-        save_data()
+        await users_col.update_one(
+            {"_id": user.id},
+            {"$set": {"first_name": user.first_name or "کاربر", "username": user.username or ""}},
+            upsert=True
+        )
 
-def format_points(pts: float) -> str:
-    pts = round(pts, 2)
-    return str(int(pts)) if pts.is_integer() else f"{pts:.1f}"
+async def get_user_wallet(user_id: int) -> int:
+    doc = await users_col.find_one({"_id": user_id}, {"wallet": 1})
+    return doc.get("wallet", 0) if doc else 0
 
-def add_user_points(user_id: int, points: float, p_type: str):
+async def update_user_wallet(user_id: int, amount: int):
+    await users_col.update_one({"_id": user_id}, {"$inc": {"wallet": amount}}, upsert=True)
+
+async def add_user_points(user_id: int, points: float, p_type: str):
     if points > 0:
-        point_logs.append({"user_id": user_id, "points": points, "type": p_type, "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
-        save_data()
+        await point_logs_col.insert_one({
+            "user_id": user_id,
+            "points": points,
+            "type": p_type,
+            "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
 
-def get_total_user_points(user_id: int) -> float:
-    return sum(log['points'] for log in point_logs if log['user_id'] == user_id)
-
-def get_user_daily_rank(user_id: int) -> int:
-    now = datetime.datetime.now()
-    user_sums = {}
-    for log in point_logs:
-        log_time = datetime.datetime.strptime(log['time'], "%Y-%m-%d %H:%M:%S")
-        if (now - log_time).total_seconds() <= 86400:
-            uid = log['user_id']
-            user_sums[uid] = user_sums.get(uid, 0.0) + log['points']
-            
-    sorted_users = sorted(user_sums.items(), key=lambda x: x[1], reverse=True)
-    for rank, (u_id, pts) in enumerate(sorted_users, 1):
-        if u_id == user_id: return rank
-    return len(sorted_users) + 1
-
-def check_and_reward_referral(buyer_id: int):
-    if buyer_id in user_referrals and buyer_id not in purchased_referrals:
-        inviter_id = user_referrals[buyer_id]
-        add_user_points(inviter_id, 5.0, 'invite')
-        purchased_referrals.add(buyer_id)
-        save_data()
+async def check_and_reward_referral(buyer_id: int):
+    user_doc = await users_col.find_one({"_id": buyer_id})
+    if user_doc and user_doc.get("inviter_id") and not user_doc.get("purchased"):
+        inviter_id = user_doc["inviter_id"]
+        await add_user_points(inviter_id, 5.0, 'invite')
+        await users_col.update_one({"_id": buyer_id}, {"$set": {"purchased": True}})
         return inviter_id
     return None
 
-# ------------------- کیبوردها (مهاجرت به Aiogram) -------------------
+async def set_group_chat_id(chat_id: int):
+    await settings_col.update_one({"_id": "bot_settings"}, {"$set": {"group_chat_id": chat_id}}, upsert=True)
+
+async def get_group_chat_id():
+    doc = await settings_col.find_one({"_id": "bot_settings"})
+    return doc.get("group_chat_id") if doc else None
+
+# ------------------- کیبوردها -------------------
 def build_reply_kb(buttons):
     kb = [[KeyboardButton(text=btn) for btn in row] for row in buttons]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
@@ -198,8 +151,6 @@ def get_ai_menu():
     ])
 
 def get_telegram_menu(): return build_reply_kb([["⭐ خرید اشتراک پرمیوم تلگرام", "🌟 خرید استارز تلگرام"], ["🔙 بازگشت به منوی اصلی"]])
-def get_telegram_premium_menu(): return build_reply_kb([["🗓 ۳ ماهه پرمیوم", "🗓 ۶ ماهه پرمیوم"], ["🗓 ۱۲ ماهه پرمیوم"], ["🔙 بازگشت به خدمات تلگرام"]])
-def get_telegram_stars_menu(): return build_reply_kb([["⭐ ۱۰۰ تا استارز", "⭐ ۲۰۰ تا استارز"], ["⭐ ۵۰۰ تا استارز", "⭐ ۱۰۰۰ تا استارز"], ["🔙 بازگشت به خدمات تلگرام"]])
 def get_earn_money_menu(): return build_reply_kb([["🔗 ثبت معرفی‌کننده", "📋 راهنمای کسب درآمد"], ["🏆 جدول برترین‌ها", "⭐️ امتیازات من"], ["🔙 بازگشت به منوی اصلی"]])
 def get_account_menu(): return build_reply_kb([["💳 شارژ کیف پول", "⏳ اشتراک‌های فعال"], ["📦 سوابق خرید", "🎁 کد تخفیف"], ["🔙 بازگشت به منوی اصلی"]])
 def get_vpn_menu(): return build_reply_kb([["🌀 اکانت ویندسکرایب نامحدود"], ["🌐 اشتراک V2Ray حجمی آی‌‌پی ثابت"], ["🔙 بازگشت به منوی اصلی"]])
@@ -233,11 +184,8 @@ def build_payment_keyboard(price: int, user_balance: int):
     elif user_balance > 0:
         rem = price - user_balance
         kb.append([InlineKeyboardButton(text=f"💳 کارت به کارت ({rem:,} تومان)", callback_data=f"buy_card:{rem}:{user_balance}")])
-        kb.append([InlineKeyboardButton(text=f"🌐 پرداخت ارزی ({rem:,} تومان)", callback_data=f"buy_crypto:{rem}:{user_balance}")])
     else:
         kb.append([InlineKeyboardButton(text="💳 پرداخت کارت به کارت", callback_data=f"buy_card:{price}:0")])
-        kb.append([InlineKeyboardButton(text="🌐 پرداخت ارزی (تتر)", callback_data=f"buy_crypto:{price}:0")])
-    kb.append([InlineKeyboardButton(text="🎟 اعمال کد تخفیف", callback_data=f"apply_discount:{price}")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 # ------------------- سیستم وضعیت‌ها (FSM) -------------------
@@ -251,7 +199,7 @@ router = Router()
 # ------------------- دستورات -------------------
 @router.message(Command("start"))
 async def start(message: types.Message, state: FSMContext):
-    update_user_info(message.from_user)
+    await update_user_info(message.from_user)
     await state.clear()
     await message.answer(f"سلام {message.from_user.first_name} عزیز! 👋\nبه فروشگاه خوش آمدید.", reply_markup=get_main_menu())
 
@@ -260,7 +208,7 @@ async def start(message: types.Message, state: FSMContext):
 async def handle_callback(callback: types.CallbackQuery, state: FSMContext, bot: Bot):
     data = callback.data
     user = callback.from_user
-    update_user_info(user)
+    await update_user_info(user)
     
     if data.startswith("confirm_invite:"):
         _, new_user_id, target_username_or_id = data.split(":")
@@ -273,10 +221,8 @@ async def handle_callback(callback: types.CallbackQuery, state: FSMContext, bot:
         if not is_target:
             return await callback.answer("❌ این دکمه فقط برای شخص دعوت‌کننده است!", show_alert=True)
 
-        add_user_points(user.id, 5.0, 'invite')
-        registered_inviters.add(new_user_id)
-        user_referrals[new_user_id] = user.id
-        save_data()
+        await add_user_points(user.id, 5.0, 'invite')
+        await users_col.update_one({"_id": new_user_id}, {"$set": {"inviter_id": user.id}}, upsert=True)
         await callback.answer("🎉 تایید شد! ۵ امتیاز هدیه به حساب شما اضافه شد.", show_alert=True)
         try: await callback.message.delete()
         except: pass
@@ -294,16 +240,15 @@ async def handle_callback(callback: types.CallbackQuery, state: FSMContext, bot:
 
     elif data.startswith("pay_from_wallet:"):
         price = int(data.split(":")[1])
-        user_balance = user_wallets.get(user.id, 0)
+        user_balance = await get_user_wallet(user.id)
         state_data = await state.get_data()
         selected_plan = state_data.get('pending_order', 'اشتراک')
 
         if user_balance < price:
             await callback.answer("❌ موجودی کیف پول کافی نیست!", show_alert=True)
         else:
-            user_wallets[user.id] -= price
-            save_data()
-            inviter_id = check_and_reward_referral(user.id)
+            await update_user_wallet(user.id, -price)
+            inviter_id = await check_and_reward_referral(user.id)
             if inviter_id:
                 try: await bot.send_message(chat_id=inviter_id, text="🎉 **خبر خوب!** دوست شما خرید کرد و **۵ امتیاز** گرفتی!")
                 except: pass
@@ -329,7 +274,6 @@ async def handle_photo(message: types.Message, state: FSMContext, bot: Bot):
         photo_id = message.photo[-1].file_id if message.photo else message.document.file_id
         state_data = await state.get_data()
         order_details = state_data.get('pending_order', 'اکانت سفارشی')
-        wallet_deduct = state_data.get('wallet_deduct', 0)
         
         admin_kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="✅ تایید و ارسال", callback_data=f"send_acc:{message.from_user.id}")]
@@ -341,43 +285,40 @@ async def handle_photo(message: types.Message, state: FSMContext, bot: Bot):
 # ------------------- پردازش پیام‌های متنی -------------------
 @router.message(F.text)
 async def handle_text(message: types.Message, state: FSMContext, bot: Bot):
-    global group_chat_id
     text = message.text.strip()
     user = message.from_user
     chat_type = message.chat.type
 
-    # وضعیت‌های ادمین و معرفی‌کننده
+    # مدیریت وضعیت ادمین
     current_state = await state.get_state()
     if current_state == BotStates.WAITING_FOR_ACCOUNT.state and user.id == ADMIN_ID:
         state_data = await state.get_data()
         target_uid = state_data.get('target_uid')
         try:
             await bot.send_message(chat_id=target_uid, text=f"🎉 **سفارش شما تحویل داده شد:**\n\n{text}\n\nبا تشکر از خرید شما!", parse_mode=ParseMode.MARKDOWN)
-            user_subscriptions.setdefault(target_uid, []).append({"name": "سفارش", "expire": "فعال", "details": text})
-            save_data()
+            await users_col.update_one({"_id": target_uid}, {"$push": {"subscriptions": {"name": "سفارش", "expire": "فعال", "details": text}}}, upsert=True)
             await message.answer("✅ اطلاعات برای کاربر ارسال شد.")
         except Exception as e: await message.answer(f"❌ خطا: {e}")
         return await state.clear()
 
     if current_state == BotStates.WAITING_FOR_INVITER.state:
-        if not group_chat_id: return await message.answer("❌ گروه پیدا نشد!")
+        g_id = await get_group_chat_id()
+        if not g_id: return await message.answer("❌ گروه پیدا نشد!")
         kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✅ بله، من دعوت کردم (+۵ امتیاز)", callback_data=f"confirm_invite:{user.id}:{text.replace('@', '')}")]])
-        await bot.send_message(chat_id=group_chat_id, text=f"📢 **تایید دعوت‌کننده:**\nکاربر [{user.first_name}](tg://user?id={user.id}) اعلام کرده توسط @{text} دعوت شده. تایید می‌کنید؟", reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+        await bot.send_message(chat_id=g_id, text=f"📢 **تایید دعوت‌کننده:**\nکاربر [{user.first_name}](tg://user?id={user.id}) اعلام کرده توسط @{text} دعوت شده. تایید می‌کنید؟", reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
         await state.clear()
         return await message.answer("✅ درخواست تایید در گروه ارسال شد!")
 
     # مدیریت پیام‌های گروه
     if chat_type in [ChatType.GROUP, ChatType.SUPERGROUP]:
-        if group_chat_id != message.chat.id:
-            group_chat_id = message.chat.id
-            save_data()
+        await set_group_chat_id(message.chat.id)
         if message.reply_to_message and not message.reply_to_message.from_user.is_bot and text in ['+', '+1', 'امتیاز', 'مفید بود']:
             answerer = message.reply_to_message.from_user
             if user.id != answerer.id:
-                add_user_points(answerer.id, 1.0, 'answer')
+                await add_user_points(answerer.id, 1.0, 'answer')
                 try: await message.answer(f"🌱 پاسخ مفید تشخیص داده شد!\n➕ **۱+ امتیاز به {answerer.first_name} اضافه شد.**")
                 except: pass
-        add_user_points(user.id, 0.1, 'chat')
+        await add_user_points(user.id, 0.1, 'chat')
         return
 
     # منوهای اصلی و ناوبری
@@ -387,9 +328,10 @@ async def handle_text(message: types.Message, state: FSMContext, bot: Bot):
     elif text == "⭐️ خدمات تلگرام و استارز": await message.answer("⭐️ لطفاً بخش مورد نظر را انتخاب کنید:", reply_markup=get_telegram_menu())
     elif text == "💰 کسب درآمد و امتیاز": await message.answer("💰 لطفاً یک گزینه انتخاب کنید:", reply_markup=get_earn_money_menu())
     elif text == "👤 حساب و کیف پول": 
-        await message.answer(f"👤 **حساب کاربری**\n💰 موجودی: **{user_wallets.get(user.id, 0):,} تومان**", reply_markup=get_account_menu(), parse_mode=ParseMode.MARKDOWN)
+        bal = await get_user_wallet(user.id)
+        await message.answer(f"👤 **حساب کاربری**\n💰 موجودی: **{bal:,} تومان**", reply_markup=get_account_menu(), parse_mode=ParseMode.MARKDOWN)
     
-    # منوهای فرعی V2ray و ویندسکرایب
+    # منوهای فرعی
     elif text == "🌐 اشتراک V2Ray حجمی آی‌پی ثابت": await message.answer("🌐 نوع سرویس:", reply_markup=get_v2ray_type_menu())
     elif text == "⭐ اشتراک‌های تک لوکیشن VIP آی‌پی ثابت برای کارهای تخصصی": await message.answer("📍 انتخاب لوکیشن:", reply_markup=get_v2ray_locations_menu())
     elif text in V2RAY_LOCATIONS: await message.answer(f"📍 لوکیشن: **{text}**\nحجم مورد نظر را انتخاب کنید:", reply_markup=get_v2ray_plans_menu())
@@ -402,14 +344,14 @@ async def handle_text(message: types.Message, state: FSMContext, bot: Bot):
         kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="💬 ارتباط با پشتیبانی", url=f"https://t.me/{ADMIN_USERNAME}")]])
         await message.answer(f"🛍 درخواست شما برای **{text}** ثبت اولیه شد.\nبرای تکمیل فرآیند و استعلام قیمت روز به پشتیبانی پیام دهید.", reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
 
-    # تشخیص خرید بر اساس متن قیمت
+    # خرید بر اساس متن قیمت
     elif "تومان" in text and ("کاربره" in text or "اشتراک" in text or "استارز" in text or "پرمیوم" in text):
         clean_price = re.sub(r'[^\d]', '', text)
         if clean_price.isdigit():
             price = int(clean_price)
             item_title = text.split("-")[0].strip()
             await state.update_data(pending_order=item_title)
-            user_bal = user_wallets.get(user.id, 0)
+            user_bal = await get_user_wallet(user.id)
             await message.answer(f"🛍 **سفارش:** {item_title}\n💰 **قیمت:** {price:,} تومان\n💳 **موجودی شما:** {user_bal:,} تومان", reply_markup=build_payment_keyboard(price, user_bal), parse_mode=ParseMode.MARKDOWN)
 
     # دکمه‌های متفرقه
@@ -417,7 +359,8 @@ async def handle_text(message: types.Message, state: FSMContext, bot: Bot):
         await state.set_state(BotStates.WAITING_FOR_INVITER)
         await message.answer("✏️ لطفاً آیدی شخصی که شما را دعوت کرده بفرستید:")
     elif text == "⏳ اشتراک‌های فعال":
-        subs = user_subscriptions.get(user.id, [])
+        doc = await users_col.find_one({"_id": user.id}, {"subscriptions": 1})
+        subs = doc.get("subscriptions", []) if doc else []
         if subs: await message.answer("\n".join([f"🔹 {s['name']} | {s['expire']}\n`{s['details']}`" for s in subs]), parse_mode=ParseMode.MARKDOWN)
         else: await message.answer("❌ اشتراک فعالی ندارید.")
 
@@ -426,7 +369,7 @@ async def main():
     bot = Bot(token=TOKEN)
     dp = Dispatcher()
     dp.include_router(router)
-    print("🤖 Bot is running with Aiogram 3...")
+    print("🤖 Bot connected to MongoDB and running with Aiogram 3...")
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
