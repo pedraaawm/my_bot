@@ -10,14 +10,14 @@ from aiogram.types import Message
 from pymongo import MongoClient
 
 # ------------------- تنظیمات اولیه -------------------
-API_TOKEN = "8909439742:AAGLea9vDRXufHxbCXIZ8n7yGY2SmQVE0L8"
+API_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 8846204367  # آیدی عددی ادمین
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
-# اتصال به دیتابیس ابری MongoDB Atlas با اطلاعات شما
-MONGO_URL = "mongodb+srv://Pedraaawm_db_user:QJzZfOPM7cQRaVAd@cluster0.wul6ohg.mongodb.net/?appName=Cluster0"
+# اتصال به دیتابیس ابری MongoDB Atlas
+MONGO_URL = os.getenv("MONGO_URI", "mongodb+srv://Pedraaawm_db_user:QJzZfOPM7cQRaVAd@cluster0.wul6ohg.mongodb.net/?appName=Cluster0")
 client = MongoClient(MONGO_URL)
 db = client["my_bot_database"]
 wallets_collection = db["wallets"]  # ذخیره موجودی کیف پول‌ها
@@ -63,6 +63,16 @@ def generate_discount_code(percent: int) -> str:
   """تولید کد تخفیف انحصاری"""
   chars = string.ascii_uppercase + string.digits
   return f"OFF{percent}-" + "".join(random.choices(chars, k=6))
+
+
+# ------------------- ۰. هندلر دستور استارت (جدید) -------------------
+@dp.message(Command("start"))
+async def cmd_start(message: Message):
+  await message.reply(
+      "سلام! 👋 به ربات مدیریت مالی و تخفیف خوش آمدید.\n\n"
+      "برای بررسی موجودی کیف پول خود می‌توانید از دستور /balance استفاده کنید.",
+      parse_mode="Markdown",
+  )
 
 
 # ------------------- ۱. هدیه تومانی مستقیم در گروه (gift / /gift) -------------------
