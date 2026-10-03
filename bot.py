@@ -14,7 +14,7 @@ from aiogram.enums import ChatType, ParseMode
 from motor.motor_asyncio import AsyncIOMotorClient
 
 # ------------------- تنظیمات اولیه -------------------
-TOKEN = os.getenv("BOT_TOKEN", "8909439742:AAF0a-ZR0OG-p5YbHq0_Eh6cucO8_xrAWQU")
+TOKEN = os.getenv("BOT_TOKEN", "8909439742:AAHTjl4vFj5r0S7XWYi8jo3KMF9uDiDC6R8")
 ADMIN_USERNAME = 'eror5511'
 ADMIN_ID = 8846204367
 
